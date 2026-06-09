@@ -8,7 +8,7 @@ ETLReader runs as a stdio MCP server. An LLM agent (GitHub Copilot, Claude, etc.
 
 ```
 1. load_traces    → Load a .etl.zip or raw .etl file into a session
-2. prepare_etl    → Extract the ETL binary and build an ETLX index (async, agent polls)
+2. prepare_etl    → Extract the ETL binary and build an ETLX index (async, agent polls with progress %)
 3. Analysis tools → Query CPU stacks, allocations, I/O, etc.
 ```
 
@@ -22,20 +22,27 @@ The ETL binary (~700MB) is extracted lazily. The ETLX index is cached so subsequ
 |------|-------------|
 | `load_traces` | Load `.etl.zip`, raw `.etl`, or a folder into a session (baseline and/or target) |
 | `session_status` | Show what's currently loaded |
-| `prepare_etl` | Extract ETL and build ETLX index (steps: `extract` → `index` → `status`) |
+| `prepare_etl` | Extract ETL and build ETLX index (steps: `extract` → `index` → `status`). Reports `progressPercent` during both extraction and indexing. |
 
 ### Analysis
 
 | Tool | Description |
 |------|-------------|
 | `list_processes` | Processes in the trace with CPU time, PIDs, and command lines |
-| `get_cpu_stacks` | CPU sampling stacks — `tree` (by-name), `hotpath`, or `diff` (baseline vs target) |
-| `get_clr_data` | CLR runtime: `allocations`, `jit`, `exceptions`, `contention`, `gc` |
-| `get_io_activity` | File I/O reads/writes aggregated by path |
-| `get_memory` | Process memory snapshots |
-| `get_etw_events` | Query any ETW provider's events. Omit provider to list all. |
+| `get_cpu_stacks` | CPU sampling stacks — `tree` (by-name), `hotpath`, or `diff` (baseline vs target). Filters to PerfInfo/SampledProfile events. |
+| `get_clr_data` | CLR runtime: `allocations`, `jit`, `exceptions`, `contention`, `gc`. Requires CLR ETW provider in trace. |
+| `get_io_activity` | File I/O reads/writes aggregated by path. Requires FileIO kernel provider in trace. |
+| `get_memory` | Process memory snapshots from ProcessCounters events. Not all traces contain this data. |
+| `get_etw_events` | Query any ETW provider's events. Omit provider to list all. Supports process filtering. |
 
 All analysis tools support filtering by process name/ID and time range.
+
+### Error Handling
+
+All tools are honest about their data requirements:
+- Empty results return `{ "data": [], "note": "..." }` explaining why (e.g., missing ETW provider)
+- Errors return `{ "error": "...", "hint": "..." }` with actionable guidance
+- No tool returns fake data or fails silently
 
 ## Project Structure
 
@@ -107,7 +114,7 @@ And configure in their MCP settings:
     "ETLReader": {
       "type": "stdio",
       "command": "dnx",
-      "args": ["ETLReader@2.0.1", "--source", "https://api.nuget.org/v3/index.json", "--yes"]
+      "args": ["ETLReader@2.0.2", "--source", "https://api.nuget.org/v3/index.json", "--yes"]
     }
   }
 }
