@@ -107,7 +107,7 @@ And configure in their MCP settings:
     "ETLReader": {
       "type": "stdio",
       "command": "dnx",
-      "args": ["ETLReader", "--version", "1.0.0", "--yes"]
+      "args": ["ETLReader@2.0.1", "--source", "https://api.nuget.org/v3/index.json", "--yes"]
     }
   }
 }

@@ -2,8 +2,13 @@
   "servers": {
     "ETLReader": {
       "type": "stdio",
-      "command": "dotnet",
-      "args": ["run", "--project", "${workspaceFolder}/src"]
+      "command": "dnx",
+      "args": [
+        "ETLReader@2.0.1",
+        "--source",
+        "https://api.nuget.org/v3/index.json",
+        "--yes"
+      ]
     }
   }
 }
