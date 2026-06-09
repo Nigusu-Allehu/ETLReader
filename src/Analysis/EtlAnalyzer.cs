@@ -32,7 +32,7 @@ public class EtlAnalyzer : IDisposable
     private readonly SymbolReader _symbolReader;
     private List<ProviderSummary>? _cachedProviders;
 
-    public EtlAnalyzer(string etlPath, string? bundledSymbolsPath = null, string? userSymbolPath = null)
+    public EtlAnalyzer(string etlPath, string? bundledSymbolsPath = null, string? userSymbolPath = null, Action<int>? onProgress = null)
     {
         // Use persistent ETLX cache
         var etlxCacheDir = Path.Combine(Path.GetTempPath(), "ETLReader", "etlx-cache");
@@ -41,9 +41,38 @@ public class EtlAnalyzer : IDisposable
         var cachedEtlxPath = Path.Combine(etlxCacheDir, etlHash + ".etlx");
 
         if (File.Exists(cachedEtlxPath))
+        {
+            onProgress?.Invoke(100);
             _traceLog = new TraceLog(cachedEtlxPath);
+        }
         else
+        {
+            var etlSize = new FileInfo(etlPath).Length;
+
+            // Monitor ETLX file growth in background for progress reporting
+            using var cts = new CancellationTokenSource();
+            if (onProgress != null)
+            {
+                _ = Task.Run(() =>
+                {
+                    while (!cts.Token.IsCancellationRequested)
+                    {
+                        try
+                        {
+                            var written = File.Exists(cachedEtlxPath) ? new FileInfo(cachedEtlxPath).Length : 0;
+                            var pct = etlSize > 0 ? (int)(written * 100 / etlSize) : 0;
+                            onProgress(Math.Min(pct, 99));
+                        }
+                        catch { /* file may not exist yet */ }
+                        Thread.Sleep(500);
+                    }
+                }, cts.Token);
+            }
+
             _traceLog = new TraceLog(TraceLog.CreateFromEventTraceLogFile(etlPath, cachedEtlxPath));
+            cts.Cancel();
+            onProgress?.Invoke(100);
+        }
 
         var symbolPath = BuildSymbolPath(bundledSymbolsPath, userSymbolPath);
         _symbolReader = new SymbolReader(TextWriter.Null, symbolPath);

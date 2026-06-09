@@ -97,12 +97,27 @@ public partial class TracePackage : IDisposable
 
     /// <summary>
     /// Extract the raw ETL binary from the zip (slow — 700MB+). Called on demand.
+    /// Reports progress via ProgressPercent.
     /// </summary>
     public void ExtractEtl()
     {
         if (IsEtlExtracted || EtlFilePath == null) return;
 
         using var archive = ZipFile.OpenRead(SourcePath);
+
+        // Find total size of entries we'll extract
+        long totalBytes = 0;
+        long writtenBytes = 0;
+        foreach (var entry in archive.Entries)
+        {
+            if (entry.FullName.EndsWith(".etl", StringComparison.OrdinalIgnoreCase) &&
+                !entry.FullName.EndsWith(".etl.zip", StringComparison.OrdinalIgnoreCase))
+                totalBytes += entry.Length;
+            if (entry.FullName.Contains("symbols", StringComparison.OrdinalIgnoreCase) &&
+                !string.IsNullOrEmpty(entry.Name))
+                totalBytes += entry.Length;
+        }
+
         foreach (var entry in archive.Entries)
         {
             // Extract ETL
@@ -111,7 +126,7 @@ public partial class TracePackage : IDisposable
             {
                 var destPath = Path.Combine(ExtractedDir, entry.FullName);
                 Directory.CreateDirectory(Path.GetDirectoryName(destPath)!);
-                entry.ExtractToFile(destPath, overwrite: true);
+                ExtractWithProgress(entry, destPath, totalBytes, ref writtenBytes);
                 EtlFilePath = destPath;
                 IsEtlExtracted = true;
             }
@@ -122,8 +137,25 @@ public partial class TracePackage : IDisposable
             {
                 var destPath = Path.Combine(ExtractedDir, entry.FullName);
                 Directory.CreateDirectory(Path.GetDirectoryName(destPath)!);
-                entry.ExtractToFile(destPath, overwrite: true);
+                ExtractWithProgress(entry, destPath, totalBytes, ref writtenBytes);
             }
+        }
+
+        ProgressPercent = 100;
+    }
+
+    private void ExtractWithProgress(ZipArchiveEntry entry, string destPath, long totalBytes, ref long writtenBytes)
+    {
+        using var source = entry.Open();
+        using var dest = File.Create(destPath);
+        var buffer = new byte[81920];
+        int bytesRead;
+        while ((bytesRead = source.Read(buffer, 0, buffer.Length)) > 0)
+        {
+            dest.Write(buffer, 0, bytesRead);
+            writtenBytes += bytesRead;
+            if (totalBytes > 0)
+                ProgressPercent = (int)(writtenBytes * 100 / totalBytes);
         }
     }
 

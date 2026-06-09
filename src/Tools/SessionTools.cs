@@ -101,6 +101,7 @@ public class SessionTools
             indexing = pkg.IsIndexing,
             indexed = pkg.Analyzer != null,
             indexError = pkg.IndexError,
+            progressPercent = pkg.ProgressPercent,
             ready = pkg.IsEtlExtracted && pkg.Analyzer != null,
             nextStep = pkg.IsExtracting ? "Extraction in progress — poll status again."
                 : pkg.IsIndexing ? "Indexing in progress — poll status again."
@@ -120,6 +121,7 @@ public class SessionTools
 
         pkg.IsExtracting = true;
         pkg.ExtractError = null;
+        pkg.ProgressPercent = 0;
         _ = Task.Run(() =>
         {
             try { pkg.ExtractEtl(); }
@@ -143,9 +145,10 @@ public class SessionTools
 
         pkg.IsIndexing = true;
         pkg.IndexError = null;
+        pkg.ProgressPercent = 0;
         _ = Task.Run(() =>
         {
-            try { pkg.Analyzer = new Analysis.EtlAnalyzer(pkg.EtlFilePath!, pkg.SymbolsPath, _session.SymbolPath); }
+            try { pkg.Analyzer = new Analysis.EtlAnalyzer(pkg.EtlFilePath!, pkg.SymbolsPath, _session.SymbolPath, pct => pkg.ProgressPercent = pct); }
             catch (Exception ex) { pkg.IndexError = ex.Message; }
             finally { pkg.IsIndexing = false; }
         });
