@@ -179,18 +179,50 @@ public class EtlAnalyzer : IDisposable
 
     internal StackSource? BuildCpuStackSource(double? startMs, double? stopMs, string? processName, int? processId)
     {
-        var events = _traceLog.Events
-            .Filter(e => startMs == null || e.TimeStampRelativeMSec >= startMs.Value)
-            .Filter(e => stopMs == null || e.TimeStampRelativeMSec <= stopMs.Value)
-            .Filter(e => processName == null || (e.ProcessName?.Equals(processName, StringComparison.OrdinalIgnoreCase) ?? false))
-            .Filter(e => processId == null || e.ProcessID == processId.Value);
+        var traceProc = processName != null
+            ? _traceLog.Processes.FirstOrDefault(p => p.Name.Equals(processName, StringComparison.OrdinalIgnoreCase))
+            : processId.HasValue
+                ? _traceLog.Processes.FirstOrDefault(p => p.ProcessID == processId.Value)
+                : null;
 
-        var cpuSource = new TraceEventStackSource(events);
+        // Use the proper MutableTraceEventStackSource with SampleProfile events
+        var stackSource = new MutableTraceEventStackSource(_traceLog);
+        var sample = new StackSourceSample(stackSource);
+        var hasData = false;
 
-        try { cpuSource.LookupWarmSymbols(minCount: 5, _symbolReader, cpuSource, null); }
-        catch { /* best effort */ }
+        foreach (var ev in _traceLog.Events)
+        {
+            // Only CPU sample events (PerfInfo/Sample or SampledProfile)
+            if (!ev.EventName.Contains("SampledProfile") && !ev.EventName.Contains("Sample") &&
+                ev.ProviderName != "PerfInfo")
+                continue;
 
-        return cpuSource;
+            if (startMs.HasValue && ev.TimeStampRelativeMSec < startMs.Value) continue;
+            if (stopMs.HasValue && ev.TimeStampRelativeMSec > stopMs.Value) continue;
+            if (traceProc != null && ev.ProcessID != traceProc.ProcessID) continue;
+            if (processId.HasValue && ev.ProcessID != processId.Value) continue;
+
+            var callStack = stackSource.GetCallStack(ev.CallStackIndex(), ev);
+            if (callStack == StackSourceCallStackIndex.Invalid) continue;
+
+            sample.StackIndex = callStack;
+            sample.Metric = 1.0f; // Each sample = 1ms of CPU
+            sample.Count = 1;
+            sample.TimeRelativeMSec = ev.TimeStampRelativeMSec;
+            stackSource.AddSample(sample);
+            hasData = true;
+        }
+
+        if (!hasData) return null;
+        stackSource.DoneAddingSamples();
+
+        if (_symbolReader != null)
+        {
+            try { stackSource.LookupWarmSymbols(minCount: 5, _symbolReader); }
+            catch { /* best effort */ }
+        }
+
+        return stackSource;
     }
 
     #endregion
