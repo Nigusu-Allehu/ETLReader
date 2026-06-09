@@ -1,0 +1,9 @@
+{
+  "servers": {
+    "ETLReader": {
+      "type": "stdio",
+      "command": "dotnet",
+      "args": ["run", "--project", "${workspaceFolder}/src"]
+    }
+  }
+}
