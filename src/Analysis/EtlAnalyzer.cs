@@ -371,13 +371,33 @@ public class EtlAnalyzer : IDisposable
 
     #region Memory
 
-    public List<MemorySnapshot> GetMemorySnapshots(string? processName)
+    public List<MemorySnapshot> GetMemorySnapshots(string? processName, int? processId)
     {
-        return _traceLog.Processes
-            .Where(p => !string.IsNullOrEmpty(p.Name))
-            .Where(p => processName == null || p.Name.Equals(processName, StringComparison.OrdinalIgnoreCase))
-            .Select(p => new MemorySnapshot(p.Name, p.ProcessID, 0, 0, 0))
-            .ToList();
+        var snapshots = new Dictionary<int, MemorySnapshot>();
+
+        // Look for ProcessCounters, VirtualAlloc, or similar memory events
+        foreach (var ev in _traceLog.Events)
+        {
+            if (!ev.EventName.Contains("ProcessCounters", StringComparison.OrdinalIgnoreCase) &&
+                !ev.EventName.Contains("ProcessMemInfo", StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            if (processName != null && !(ev.ProcessName?.Equals(processName, StringComparison.OrdinalIgnoreCase) ?? false)) continue;
+            if (processId.HasValue && ev.ProcessID != processId.Value) continue;
+
+            var ws = GetPayloadLong(ev, "WorkingSetSize");
+            if (ws == 0) ws = GetPayloadLong(ev, "WorkingSet");
+            var priv = GetPayloadLong(ev, "PrivateUsage");
+            if (priv == 0) priv = GetPayloadLong(ev, "PrivateBytes");
+            var virt = GetPayloadLong(ev, "VirtualSize");
+            if (virt == 0) virt = GetPayloadLong(ev, "VirtualBytes");
+
+            // Keep the latest snapshot per process
+            if (ws > 0 || priv > 0 || virt > 0)
+                snapshots[ev.ProcessID] = new MemorySnapshot(ev.ProcessName ?? "", ev.ProcessID, ws, priv, virt);
+        }
+
+        return snapshots.Values.OrderByDescending(s => s.WorkingSetBytes).ToList();
     }
 
     #endregion
@@ -426,22 +446,30 @@ public class EtlAnalyzer : IDisposable
 
     #region ETW Events & Providers
 
-    public List<ProviderSummary> GetProviders()
+    public List<ProviderSummary> GetProviders(string? processName = null, int? processId = null)
     {
-        if (_cachedProviders != null) return _cachedProviders;
+        // If no filter, use cache
+        if (processName == null && processId == null && _cachedProviders != null)
+            return _cachedProviders;
 
         var providers = new Dictionary<string, int>();
         foreach (var ev in _traceLog.Events)
         {
+            if (processName != null && !(ev.ProcessName?.Equals(processName, StringComparison.OrdinalIgnoreCase) ?? false)) continue;
+            if (processId.HasValue && ev.ProcessID != processId.Value) continue;
             var name = ev.ProviderName ?? "unknown";
             providers[name] = providers.GetValueOrDefault(name) + 1;
         }
 
-        _cachedProviders = providers.OrderByDescending(kv => kv.Value)
+        var result = providers.OrderByDescending(kv => kv.Value)
             .Select(kv => new ProviderSummary(kv.Key, kv.Value))
             .ToList();
 
-        return _cachedProviders;
+        // Only cache unfiltered results
+        if (processName == null && processId == null)
+            _cachedProviders = result;
+
+        return result;
     }
 
     public List<EtwEvent> GetEvents(string providerName, string? eventName, double? startMs, double? stopMs, string? processName, int? processId, int skip, int take)

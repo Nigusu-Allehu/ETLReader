@@ -47,25 +47,45 @@ public class AnalysisTools
             var baseline = GetAnalyzer("baseline");
             if (target == null || baseline == null) return NotReady();
 
-            var diff = target.DiffCpuStacks(baseline, startMs, endMs, processName, processId, minPercent);
-            return Json(diff);
+            try
+            {
+                var diff = target.DiffCpuStacks(baseline, startMs, endMs, processName, processId, minPercent);
+                if (diff.Count == 0)
+                    return Json(new { data = Array.Empty<object>(), note = "No CPU sample differences found. The trace may lack PerfInfo/Sample events, or the time range/process filter matched no samples." });
+                return Json(diff);
+            }
+            catch (Exception ex)
+            {
+                return Json(new { error = $"CPU stack diff failed: {ex.Message}", hint = "Ensure both traces contain CPU sampling (PerfInfo) events for the specified process." });
+            }
         }
 
         var analyzer = GetAnalyzer(side);
         if (analyzer == null) return NotReady();
 
-        if (mode == "hotpath")
+        try
         {
-            var path = analyzer.GetHotPath(startMs, endMs, processName, processId);
-            return Json(path);
-        }
+            if (mode == "hotpath")
+            {
+                var path = analyzer.GetHotPath(startMs, endMs, processName, processId);
+                if (path.Count == 0)
+                    return Json(new { data = Array.Empty<object>(), note = "No hot path found. The trace may lack CPU sampling events for this process/time range." });
+                return Json(path);
+            }
 
-        var frames = analyzer.GetCpuStacks(startMs, endMs, processName, processId, minPercent, take);
-        return Json(frames);
+            var frames = analyzer.GetCpuStacks(startMs, endMs, processName, processId, minPercent, take);
+            if (frames.Count == 0)
+                return Json(new { data = Array.Empty<object>(), note = "No CPU samples found. The trace may lack PerfInfo/Sample events, or the process/time filter matched nothing." });
+            return Json(frames);
+        }
+        catch (Exception ex)
+        {
+            return Json(new { error = $"CPU stack analysis failed: {ex.Message}", hint = "This usually means the trace lacks CPU sampling events (PerfInfo provider)." });
+        }
     }
 
     [McpServerTool(Name = "get_clr_data")]
-    [Description("Analyze .NET CLR runtime behavior. category='allocations', 'jit', 'exceptions', 'contention', or 'gc'.")]
+    [Description("Analyze .NET CLR runtime behavior. category='allocations', 'jit', 'exceptions', 'contention', or 'gc'. Requires CLR ETW provider to have been enabled during trace collection.")]
     public string GetClrData(
         [Description("One of: 'allocations', 'jit', 'exceptions', 'contention', 'gc'")] string category,
         [Description("Filter by process name")] string? processName = null,
@@ -80,21 +100,32 @@ public class AnalysisTools
         var analyzer = GetAnalyzer(side);
         if (analyzer == null) return NotReady();
 
-        object result = category switch
+        try
         {
-            "allocations" => analyzer.GetAllocations(startMs, endMs, processName, processId, sortBy ?? "bytes", take),
-            "jit" => analyzer.GetJitEvents(startMs, endMs, processName, processId, groupBy, sortBy ?? "size", take),
-            "exceptions" => analyzer.GetExceptions(startMs, endMs, processName, processId, take),
-            "contention" => analyzer.GetContention(startMs, endMs, processName, processId, take),
-            "gc" => analyzer.GetGcEvents(startMs, endMs, processName, processId, take),
-            _ => new { error = $"Unknown category '{category}'. Use: allocations, jit, exceptions, contention, gc." }
-        };
+            object result = category switch
+            {
+                "allocations" => analyzer.GetAllocations(startMs, endMs, processName, processId, sortBy ?? "bytes", take),
+                "jit" => analyzer.GetJitEvents(startMs, endMs, processName, processId, groupBy, sortBy ?? "size", take),
+                "exceptions" => analyzer.GetExceptions(startMs, endMs, processName, processId, take),
+                "contention" => analyzer.GetContention(startMs, endMs, processName, processId, take),
+                "gc" => analyzer.GetGcEvents(startMs, endMs, processName, processId, take),
+                _ => (object)new { error = $"Unknown category '{category}'. Use: allocations, jit, exceptions, contention, gc." }
+            };
 
-        return Json(result);
+            // Check for empty results and explain why
+            if (result is System.Collections.ICollection { Count: 0 })
+                return Json(new { data = Array.Empty<object>(), note = $"No {category} data found. The CLR ETW provider may not have been enabled during trace collection, or no {category} events occurred for the specified process/time range." });
+
+            return Json(result);
+        }
+        catch (Exception ex)
+        {
+            return Json(new { error = $"CLR {category} analysis failed: {ex.Message}", hint = "Ensure the trace was collected with the CLR ETW provider enabled." });
+        }
     }
 
     [McpServerTool(Name = "get_io_activity")]
-    [Description("Analyze file I/O — reads and writes aggregated by file path.")]
+    [Description("Analyze file I/O — reads and writes aggregated by file path. Requires FileIO kernel provider in the trace.")]
     public string GetIoActivity(
         [Description("Filter by process name")] string? processName = null,
         [Description("Filter by process ID")] int? processId = null,
@@ -108,29 +139,49 @@ public class AnalysisTools
         var analyzer = GetAnalyzer(side);
         if (analyzer == null) return NotReady();
 
-        var results = analyzer.GetFileIo(startMs, endMs, processName, processId, ioType, take);
-
-        if (filter != null)
+        try
         {
-            var regex = new System.Text.RegularExpressions.Regex(filter, System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-            results = results.Where(r => regex.IsMatch(r.FilePath)).ToList();
-        }
+            var results = analyzer.GetFileIo(startMs, endMs, processName, processId, ioType, take);
 
-        return Json(results);
+            if (filter != null)
+            {
+                var regex = new System.Text.RegularExpressions.Regex(filter, System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                results = results.Where(r => regex.IsMatch(r.FilePath)).ToList();
+            }
+
+            if (results.Count == 0)
+                return Json(new { data = Array.Empty<object>(), note = "No file I/O events found. The FileIO kernel provider may not have been enabled during trace collection, or no I/O occurred for the specified filters." });
+
+            return Json(results);
+        }
+        catch (Exception ex)
+        {
+            return Json(new { error = $"File I/O analysis failed: {ex.Message}" });
+        }
     }
 
     [McpServerTool(Name = "get_memory")]
-    [Description("Get process memory usage snapshots (working set, private bytes, virtual bytes).")]
+    [Description("Get process memory usage snapshots. Reads ProcessCounters ETW events if present; not all traces contain this data.")]
     public string GetMemory(
         [Description("Filter by process name")] string? processName = null,
+        [Description("Filter by process ID")] int? processId = null,
         [Description("Max results (default: 30)")] int take = 30,
         [Description("'baseline' or 'target' (default: 'target')")] string? side = null)
     {
         var analyzer = GetAnalyzer(side);
         if (analyzer == null) return NotReady();
 
-        var snapshots = analyzer.GetMemorySnapshots(processName).Take(take).ToList();
-        return Json(snapshots);
+        try
+        {
+            var snapshots = analyzer.GetMemorySnapshots(processName, processId).Take(take).ToList();
+            if (snapshots.Count == 0)
+                return Json(new { data = Array.Empty<object>(), note = "No memory data found. The trace does not contain ProcessCounters or VirtualAlloc events. Memory snapshots require specific ETW providers to be enabled during collection." });
+            return Json(snapshots);
+        }
+        catch (Exception ex)
+        {
+            return Json(new { error = $"Memory analysis failed: {ex.Message}" });
+        }
     }
 
     [McpServerTool(Name = "get_etw_events")]
@@ -149,14 +200,25 @@ public class AnalysisTools
         var analyzer = GetAnalyzer(side);
         if (analyzer == null) return NotReady();
 
-        if (providerName == null)
+        try
         {
-            var providers = analyzer.GetProviders();
-            return Json(providers);
-        }
+            if (providerName == null)
+            {
+                var providers = analyzer.GetProviders(processName, processId);
+                if (providers.Count == 0)
+                    return Json(new { data = Array.Empty<object>(), note = "No ETW providers found for the specified process filter." });
+                return Json(providers);
+            }
 
-        var events = analyzer.GetEvents(providerName, eventName, startMs, endMs, processName, processId, skip, take);
-        return Json(events);
+            var events = analyzer.GetEvents(providerName, eventName, startMs, endMs, processName, processId, skip, take);
+            if (events.Count == 0)
+                return Json(new { data = Array.Empty<object>(), note = $"No events found for provider '{providerName}' with the specified filters." });
+            return Json(events);
+        }
+        catch (Exception ex)
+        {
+            return Json(new { error = $"ETW event query failed: {ex.Message}" });
+        }
     }
 
     private EtlAnalyzer? GetAnalyzer(string? side)
