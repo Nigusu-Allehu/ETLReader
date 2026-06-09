@@ -20,7 +20,7 @@ jobs:
           dotnet-quality: "preview"
 
       - name: Restore
-        run: dotnet restore ETLReader/ETLReader.csproj
+        run: dotnet restore src/ETLReader.csproj
 
       - name: Build
-        run: dotnet build ETLReader/ETLReader.csproj --no-restore --configuration Release
+        run: dotnet build src/ETLReader.csproj --no-restore --configuration Release

@@ -34,18 +34,18 @@ jobs:
           fi
 
       - name: Restore
-        run: dotnet restore ETLReader/ETLReader.csproj
+        run: dotnet restore src/ETLReader.csproj
 
       - name: Build
         run: |
-          dotnet build ETLReader/ETLReader.csproj \
+          dotnet build src/ETLReader.csproj \
             --no-restore \
             --configuration Release \
             -p:Version=${{ steps.version.outputs.VERSION }}
 
       - name: Pack
         run: |
-          dotnet pack ETLReader/ETLReader.csproj \
+          dotnet pack src/ETLReader.csproj \
             --no-build \
             --configuration Release \
             -p:Version=${{ steps.version.outputs.VERSION }} \
