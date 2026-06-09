@@ -1,0 +1,6 @@
+# Build outputs
+bin/
+obj/
+
+# NuGet package output
+package/

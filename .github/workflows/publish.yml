@@ -1,0 +1,59 @@
+name: Publish to NuGet
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to publish (e.g. 1.2.0)"
+        required: true
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+          dotnet-quality: "preview"
+
+      - name: Resolve version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "VERSION=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+          else
+            # Strip the leading 'v' from the tag name (v1.2.0 → 1.2.0)
+            echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Restore
+        run: dotnet restore ETLReader/ETLReader.csproj
+
+      - name: Build
+        run: |
+          dotnet build ETLReader/ETLReader.csproj \
+            --no-restore \
+            --configuration Release \
+            -p:Version=${{ steps.version.outputs.VERSION }}
+
+      - name: Pack
+        run: |
+          dotnet pack ETLReader/ETLReader.csproj \
+            --no-build \
+            --configuration Release \
+            -p:Version=${{ steps.version.outputs.VERSION }} \
+            --output ./nupkgs
+
+      - name: Push to NuGet.org
+        run: |
+          dotnet nuget push ./nupkgs/*.nupkg \
+            --api-key ${{ secrets.NUGET_API_KEY }} \
+            --source https://api.nuget.org/v3/index.json \
+            --skip-duplicate
