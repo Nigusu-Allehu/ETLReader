@@ -148,9 +148,18 @@ public class SessionTools
         pkg.ProgressPercent = 0;
         _ = Task.Run(() =>
         {
-            try { pkg.Analyzer = new Analysis.EtlAnalyzer(pkg.EtlFilePath!, pkg.SymbolsPath, _session.SymbolPath, pct => pkg.ProgressPercent = pct); }
+            try
+            {
+                pkg.Analyzer = new Analysis.EtlAnalyzer(
+                    pkg.EtlFilePath!, pkg.SymbolsPath, _session.SymbolPath,
+                    pct => pkg.ProgressPercent = Math.Min(pct, 99));
+            }
             catch (Exception ex) { pkg.IndexError = ex.Message; }
-            finally { pkg.IsIndexing = false; }
+            finally
+            {
+                pkg.IsIndexing = false;
+                if (pkg.Analyzer != null) pkg.ProgressPercent = 100;
+            }
         });
 
         return Json(new { status = "started", message = "Indexing started. Poll prepare_etl(step='status')." });

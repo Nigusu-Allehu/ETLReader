@@ -42,7 +42,7 @@ public class EtlAnalyzer : IDisposable
 
         if (File.Exists(cachedEtlxPath))
         {
-            onProgress?.Invoke(100);
+            onProgress?.Invoke(80);
             _traceLog = new TraceLog(cachedEtlxPath);
         }
         else
@@ -60,8 +60,8 @@ public class EtlAnalyzer : IDisposable
                         try
                         {
                             var written = File.Exists(cachedEtlxPath) ? new FileInfo(cachedEtlxPath).Length : 0;
-                            var pct = etlSize > 0 ? (int)(written * 100 / etlSize) : 0;
-                            onProgress(Math.Min(pct, 99));
+                            var pct = etlSize > 0 ? (int)(written * 80 / etlSize) : 0;
+                            onProgress(Math.Min(pct, 79));
                         }
                         catch { /* file may not exist yet */ }
                         Thread.Sleep(500);
@@ -71,12 +71,15 @@ public class EtlAnalyzer : IDisposable
 
             _traceLog = new TraceLog(TraceLog.CreateFromEventTraceLogFile(etlPath, cachedEtlxPath));
             cts.Cancel();
-            onProgress?.Invoke(100);
+            onProgress?.Invoke(80);
         }
 
+        // Symbol resolution (~20% of total time)
+        onProgress?.Invoke(85);
         var symbolPath = BuildSymbolPath(bundledSymbolsPath, userSymbolPath);
         _symbolReader = new SymbolReader(TextWriter.Null, symbolPath);
         ResolveSymbols();
+        onProgress?.Invoke(100);
     }
 
     #region Process Discovery
