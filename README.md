@@ -93,6 +93,10 @@ Or configure in `.vscode/mcp.json`:
 }
 ```
 
+## MCP Server Configuration
+
+`server.json` at the repository root contains ready-to-copy configuration blocks for both the NuGet-installed tool and local development. Pick the block that matches your setup and paste the `servers` object into your MCP client config (`.vscode/mcp.json`, `claude_desktop_config.json`, etc.).
+
 ## Publish to NuGet
 
 ```powershell
