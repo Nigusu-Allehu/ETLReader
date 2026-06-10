@@ -3,16 +3,14 @@ name: Publish to NuGet
 on:
   push:
     tags:
-      - "v*.*.*"
+      - "v*"
   workflow_dispatch:
-    inputs:
-      version:
-        description: "Version to publish (e.g. 1.2.0)"
-        required: true
 
 jobs:
   publish:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
 
     steps:
       - uses: actions/checkout@v4
@@ -26,30 +24,16 @@ jobs:
       - name: Resolve version
         id: version
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "VERSION=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
-          else
-            # Strip the leading 'v' from the tag name (v1.2.0 → 1.2.0)
-            echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
-          fi
+          echo "VERSION=$(grep -oP '(?<=<Version>)[^<]+' Directory.Build.props)" >> $GITHUB_OUTPUT
 
       - name: Restore
         run: dotnet restore src/ETLReader.csproj
 
       - name: Build
-        run: |
-          dotnet build src/ETLReader.csproj \
-            --no-restore \
-            --configuration Release \
-            -p:Version=${{ steps.version.outputs.VERSION }}
+        run: dotnet build src/ETLReader.csproj --no-restore --configuration Release
 
       - name: Pack
-        run: |
-          dotnet pack src/ETLReader.csproj \
-            --no-build \
-            --configuration Release \
-            -p:Version=${{ steps.version.outputs.VERSION }} \
-            --output ./nupkgs
+        run: dotnet pack src/ETLReader.csproj --no-build --configuration Release --output ./nupkgs
 
       - name: Push to NuGet.org
         run: |
@@ -57,3 +41,17 @@ jobs:
             --api-key ${{ secrets.NUGET_API_KEY }} \
             --source https://api.nuget.org/v3/index.json \
             --skip-duplicate
+
+      - name: Update server.json version
+        run: |
+          VERSION=${{ steps.version.outputs.VERSION }}
+          sed -i "s/ETLReader@[0-9]*\.[0-9]*\.[0-9]*/ETLReader@${VERSION}/" server.json
+
+      - name: Commit updated server.json
+        run: |
+          VERSION=${{ steps.version.outputs.VERSION }}
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add server.json
+          git diff --cached --quiet || git commit -m "chore: update server.json to v${VERSION} [skip ci]"
+          git push origin HEAD:main

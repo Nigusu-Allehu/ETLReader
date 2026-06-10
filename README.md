@@ -99,29 +99,28 @@ Copy the contents of `server.json` (repo root) directly into your MCP client con
 
 ## Publish to NuGet
 
+Releases are fully automated via CI. To publish a new version:
+
+1. Update the version in `Directory.Build.props`
+2. Push a tag (name doesn't matter — it's just the trigger):
+
+```powershell
+git tag v2.0.4
+git push origin v2.0.4
+```
+
+The publish workflow will:
+1. Read the version from `Directory.Build.props`
+2. Build and pack the `.nupkg` with that version
+3. Push it to NuGet.org (requires `NUGET_API_KEY` secret in repo settings)
+4. Update `server.json` to reference the new version and commit it back to `main`
+
+You can also trigger a publish manually from the **Actions** tab using `workflow_dispatch`.
+
+### Local build
+
 ```powershell
 .\build.ps1
-dotnet nuget push package\ETLReader.1.0.0.nupkg --api-key <KEY> --source https://api.nuget.org/v3/index.json
-```
-
-Once published, users install with:
-
-```powershell
-dotnet tool install -g ETLReader
-```
-
-And configure in their MCP settings:
-
-```json
-{
-  "servers": {
-    "ETLReader": {
-      "type": "stdio",
-      "command": "dnx",
-      "args": ["ETLReader@2.0.2", "--source", "https://api.nuget.org/v3/index.json", "--yes"]
-    }
-  }
-}
 ```
 
 ## Dependencies
