@@ -1,35 +1,14 @@
 {
-  "$schema": "https://json-schema.org/draft-07/schema",
-  "description": "Copy one of the blocks below into your MCP client configuration (e.g. .vscode/mcp.json, claude_desktop_config.json, etc.).",
-  "configurations": {
-    "nuget_installed": {
-      "description": "Use this after installing ETLReader as a global .NET tool: dotnet tool install -g ETLReader",
-      "servers": {
-        "ETLReader": {
-          "type": "stdio",
-          "command": "dnx",
-          "args": [
-            "ETLReader@2.0.2",
-            "--source",
-            "https://api.nuget.org/v3/index.json",
-            "--yes"
-          ]
-        }
-      }
-    },
-    "local_dev": {
-      "description": "Use this when running from a local clone of the repository. Replace the path with the absolute path to your ETLReader/src directory.",
-      "servers": {
-        "ETLReader": {
-          "type": "stdio",
-          "command": "dotnet",
-          "args": [
-            "run",
-            "--project",
-            "C:/path/to/ETLReader/src"
-          ]
-        }
-      }
+  "servers": {
+    "ETLReader": {
+      "type": "stdio",
+      "command": "dnx",
+      "args": [
+        "ETLReader@2.0.2",
+        "--source",
+        "https://api.nuget.org/v3/index.json",
+        "--yes"
+      ]
     }
   }
 }
