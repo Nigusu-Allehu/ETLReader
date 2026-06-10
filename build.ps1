@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-    Builds and packages the ETLReader MCP server into a .nupkg.
+    Builds and packages the ETLReader MCP server into a .nupkg. 
 #>
 param(
     [string]$Configuration = "Release"
