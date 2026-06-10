@@ -93,6 +93,10 @@ Or configure in `.vscode/mcp.json`:
 }
 ```
 
+## MCP Server Configuration
+
+Copy the contents of `server.json` (repo root) directly into your MCP client config (`.vscode/mcp.json`, `claude_desktop_config.json`, etc.). No installation step needed — `dnx` fetches and runs the tool directly from NuGet.org.
+
 ## Publish to NuGet
 
 ```powershell
