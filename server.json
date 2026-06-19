@@ -4,7 +4,7 @@
       "type": "stdio",
       "command": "dnx",
       "args": [
-        "ETLReader@2.0.5",
+        "ETLReader@2.0.4",
         "--source",
         "https://api.nuget.org/v3/index.json",
         "--yes"
