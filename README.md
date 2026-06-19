@@ -61,7 +61,7 @@ src/
 
 ## Agent Profiles
 
-- `github/agents/pr-review.agent.md` — Test specialist agent profile for test coverage and quality practices.
+- `github/agents/pr-review.agent.md` — PR reviewer agent profile that comments "Jajaja I review this PR" on every pull request.
 
 ## Build
 
