@@ -59,6 +59,10 @@ src/
     └── AnalysisTools.cs    list_processes, get_cpu_stacks, get_clr_data, etc.
 ```
 
+## Agent Profiles
+
+- `github/agents/pr-review.agent.md` — PR reviewer agent profile that comments "Jajaja I review this PR" on every pull request.
+
 ## Build
 
 ```powershell
